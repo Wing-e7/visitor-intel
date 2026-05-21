@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visitor-intel"
+version = "0.1.0"
+description = "Know if the visitor on your B2B site matches your ICP — from IP + behavior signals, no LLM required."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Percepto AI", email = "pruthvi@perceptoai.com" }]
+requires-python = ">=3.9"
+dependencies = ["httpx>=0.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-asyncio>=0.21"]
+
+[project.urls]
+Homepage = "https://github.com/perceptoai/visitor-intel"
+"Bug Tracker" = "https://github.com/perceptoai/visitor-intel/issues"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

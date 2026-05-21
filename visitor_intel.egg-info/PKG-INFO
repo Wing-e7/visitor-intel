@@ -1,0 +1,243 @@
+Metadata-Version: 2.4
+Name: visitor-intel
+Version: 0.1.0
+Summary: Know if the visitor on your B2B site matches your ICP — from IP + behavior signals, no LLM required.
+Author-email: Percepto AI <pruthvi@perceptoai.com>
+License: MIT
+Project-URL: Homepage, https://github.com/perceptoai/visitor-intel
+Project-URL: Bug Tracker, https://github.com/perceptoai/visitor-intel/issues
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: httpx>=0.24
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21; extra == "dev"
+Dynamic: license-file
+
+# visitor-intel
+
+Know if the visitor on your B2B website matches your ICP — from their IP address and behavioral signals. No LLM required. No API key for basic usage. Sub-millisecond per visitor.
+
+```python
+from visitor_intel import fetch_company_intel, compute_icp_score, score_to_fit_tier
+
+company = await fetch_company_intel("8.8.8.8")
+score = compute_icp_score(
+    company_identified=company["company_identified"],
+    utm_source="linkedin",
+    ai_referrer="chatgpt",
+    page_type="pricing",
+    time_on_page_sec=90,
+    scroll_depth_pct=80,
+    cta_clicked=True,
+    pages_visited=3,
+    is_returning=False,
+)
+print(score_to_fit_tier(score))  # "icp_fit"
+```
+
+---
+
+## Why
+
+Every B2B website has visitors that never convert. Most of them are unqualified — but you can't tell which until it's too late or until you pay Clearbit $500/mo.
+
+This library gives you:
+
+- **Company identification** from IP — is this a real business, or a residential/ISP connection?
+- **ISP/cloud filtering** — 40+ ISP and cloud provider patterns stripped automatically
+- **AI referral detection** — did this visitor come from ChatGPT, Perplexity, Claude?
+- **Rule-based ICP scoring** — 9-signal composite score, 0–100, zero LLM cost
+- **Channel normalization** — UTM + referrer → clean display name
+
+---
+
+## Install
+
+```bash
+pip install visitor-intel
+```
+
+Requires Python 3.9+. The only dependency is `httpx`.
+
+---
+
+## Usage
+
+### 1. Identify the company
+
+```python
+import asyncio
+from visitor_intel import fetch_company_intel
+
+async def main():
+    result = await fetch_company_intel("203.0.113.42")
+    print(result)
+    # {
+    #   "company_identified": True,
+    #   "company_name": "Acme Corp",
+    #   "company_domain": "",       # populated if you pass ipinfo_token
+    #   "city": "San Francisco",
+    #   "country": "US",
+    # }
+
+asyncio.run(main())
+```
+
+**With IPinfo (higher accuracy):**
+
+```python
+result = await fetch_company_intel("203.0.113.42", ipinfo_token="your_token_here")
+# company_domain is now populated, company.type == "business" check applied
+```
+
+Free tier: ip-api.com, 1000 requests/day, no sign-up. Upgrade path: pass your [IPinfo token](https://ipinfo.io/signup) for business-type filtering and domain resolution.
+
+---
+
+### 2. Detect AI referrals
+
+```python
+from visitor_intel import classify_ai_source
+
+source = classify_ai_source("https://chatgpt.com/c/abc123")
+# "chatgpt"
+
+source = classify_ai_source("https://perplexity.ai/search?q=b2b+sales+tools")
+# "perplexity"
+```
+
+Supported: ChatGPT, Perplexity, Claude, Copilot, Gemini, You.com, Phind.
+
+---
+
+### 3. Score the visitor
+
+```python
+from visitor_intel import compute_icp_score, score_to_fit_tier
+
+score = compute_icp_score(
+    company_identified=True,     # from fetch_company_intel()
+    utm_source="linkedin",       # from URL params
+    ai_referrer="chatgpt",       # from classify_ai_source()
+    page_type="pricing",         # which page they landed on
+    time_on_page_sec=90,         # seconds on page
+    scroll_depth_pct=80,         # % of page scrolled
+    cta_clicked=True,            # clicked your primary CTA
+    pages_visited=3,             # pages this session
+    is_returning=True,           # repeat visitor
+)
+
+tier = score_to_fit_tier(score)
+# "icp_fit"    → score ≥ 70
+# "potential"  → score ≥ 50
+# "low_fit"    → score < 50
+```
+
+All signals are optional. Missing/None values score zero for that signal.
+
+---
+
+### 4. Normalize the channel
+
+```python
+from visitor_intel import derive_channel
+
+derive_channel("linkedin", None, None)
+# "LinkedIn Ads"
+
+derive_channel(None, "chatgpt", None)
+# "ChatGPT"
+
+derive_channel(None, None, "https://google.com/search?q=visitor+intelligence")
+# "Organic"
+```
+
+---
+
+## Score breakdown
+
+| Signal | Points | Condition |
+|--------|--------|-----------|
+| Company identified | +20 | Business IP detected |
+| Traffic source | +15 | LinkedIn / Google Ads |
+| | +10 | Organic / SEO |
+| | +8 | Other UTM |
+| | +5 | Direct (no UTM) |
+| AI referral | +10 | ChatGPT / Perplexity / Claude / etc. |
+| Page type | +20 | Pricing |
+| | +15 | Product / Features |
+| | +10 | Docs / Technical |
+| | +5 | Other |
+| Time on page | +10 | ≥60 seconds |
+| | +5 | ≥30 seconds |
+| Scroll depth | +10 | ≥70% scrolled |
+| CTA clicked | +15 | Primary CTA clicked |
+| Pages visited | +15 | 3+ pages this session |
+| | +10 | 2 pages this session |
+| Returning visitor | +10 | Known repeat visitor |
+
+Maximum: 100 (capped).
+
+---
+
+## Running the example
+
+```bash
+git clone https://github.com/perceptoai/visitor-intel
+cd visitor-intel
+pip install -e ".[dev]"
+python examples/quickstart.py
+```
+
+---
+
+## Running tests
+
+```bash
+pytest tests/ -v
+```
+
+No network calls required — all tests are synchronous unit tests against the scoring and normalization logic.
+
+---
+
+## Architecture
+
+```
+visitor-intel/
+  visitor_intel/
+    ip_enrichment.py   # fetch_ip_intel, fetch_company_intel, classify_ai_source
+    scoring.py         # compute_icp_score, score_to_fit_tier
+    channel.py         # derive_channel
+  examples/
+    quickstart.py
+  tests/
+    test_scoring.py
+```
+
+No framework. No ORM. No config files. Plain async Python + httpx.
+
+---
+
+## What it doesn't do
+
+- No LLM calls (zero marginal cost per visitor)
+- No enrichment beyond what IP + behavioral signals give you
+- No storage (bring your own DB)
+- No real-time webhook delivery (wire it into your own stack)
+
+For the full experience — AI-powered visitor scoring, voice conversation, and CRM handoff — see [Percepto AI](https://perceptoai.com).
+
+---
+
+## Contributing
+
+PRs welcome. Open an issue first for anything beyond a small fix.
+
+---
+
+## License
+
+MIT © [Percepto AI](https://perceptoai.com)
