@@ -381,7 +381,7 @@ No framework. No ORM. No config files. Plain async Python + httpx.
 - No storage (bring your own DB)
 - No real-time webhook delivery (wire it into your own stack)
 
-For the full experience — AI-powered visitor scoring, voice conversation, and CRM handoff — see [Percepto AI](https://perceptoai.com).
+For the full experience — AI-powered visitor scoring, voice conversation, and CRM handoff — see [Percepto AI](https://www.perceptoai.com).
 
 ---
 
